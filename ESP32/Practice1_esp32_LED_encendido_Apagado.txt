@@ -1,0 +1,78 @@
+#include <stdint.h>
+
+// Definición de punteros a registros del ESP32 para GPIO
+#define GPIO_BASE 0x3FF44000  // Dirección base de los registros GPIO del ESP32
+
+typedef struct {
+    uint32_t b0 : 1;
+    uint32_t b1 : 1;
+    uint32_t b2 : 1;
+    uint32_t b3 : 1;
+    uint32_t b4 : 1;
+    uint32_t b5 : 1;
+    uint32_t b6 : 1;
+    uint32_t b7 : 1;
+    uint32_t b8 : 1;
+    uint32_t b9 : 1;
+    uint32_t b10 : 1;
+    uint32_t b11 : 1;
+    uint32_t b12 : 1;
+    uint32_t b13 : 1;
+    uint32_t b14 : 1;
+    uint32_t b15 : 1;
+    uint32_t b16 : 1;
+    uint32_t b17 : 1;
+    uint32_t b18 : 1;
+    uint32_t b19 : 1;
+    uint32_t b20 : 1;
+    uint32_t b21 : 1;
+    uint32_t b22 : 1;
+    uint32_t b23 : 1;
+    uint32_t b24 : 1;
+    uint32_t b25 : 1;
+    uint32_t b26 : 1;
+    uint32_t b27 : 1;
+    uint32_t b28 : 1;
+    uint32_t b29 : 1;
+    uint32_t b30 : 1;
+    uint32_t b31 : 1;
+} gpio_bitfield_t;
+
+typedef union {
+    gpio_bitfield_t bits;
+    uint32_t value;
+} reg32_t;
+
+// Registros importantes para GPIO
+typedef struct {
+    volatile reg32_t OUT;       // 0x00 - GPIO output register
+    volatile reg32_t OUT_W1TS;  // 0x04 - GPIO output set register
+    volatile reg32_t OUT_W1TC;  // 0x08 - GPIO output clear register
+    volatile reg32_t ENABLE;    // 0x0C - GPIO enable register
+    // ... otros registros ...
+} gpio_registers_t;
+
+#define PIN_LED 2  // GPIO2 (LED integrado en muchas placas ESP32)
+
+// Puntero a la estructura de registros GPIO
+volatile gpio_registers_t *my_GPIO = (gpio_registers_t *)GPIO_BASE;
+
+void setup() {
+    // Configurar GPIO2 como salida (habilitar el pin)
+    my_GPIO->ENABLE.bits.b2 = 1;
+    
+    // Inicializar comunicación serial (opcional)
+    Serial.begin(115200);
+}
+
+void loop() {
+    // Encender el LED (establecer el bit)
+    my_GPIO->OUT_W1TS.value = (1 << PIN_LED);
+    Serial.println("LED On");  // Opcional
+    delay(1000);
+    
+    // Apagar el LED (limpiar el bit)
+    my_GPIO->OUT_W1TC.value = (1 << PIN_LED);
+    Serial.println("LED Off");  // Opcional
+    delay(1000);
+}

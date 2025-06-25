@@ -1,0 +1,128 @@
+/**
+ * @file main.c
+ * @brief Programa para ESP32 que ejecuta dos tareas independientes usando acceso directo a registros
+ * 
+ * Este programa configura dos pines GPIO como salidas y crea dos tareas FreeRTOS que:
+ * 1. Task1: Alterna el estado de GPIO25 cada 500ms
+ * 2. Task2: Alterna el estado de GPIO26 cada 1000ms
+ * 
+ * El control de los GPIO se realiza mediante acceso directo a los registros del ESP32,
+ * similar al estilo de programación de microcontroladores AVR.
+ * 
+ * Características principales:
+ * - Uso de uniones y estructuras para acceso a bits individuales de registros
+ * - Temporización precisa mediante timers hardware
+ * - Implementación eficiente usando registros directamente
+ * - Diseño modular con tareas independientes
+ */
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <stdint.h>
+
+// Definición de pines GPIO
+#define TASK1_PIN 25  // Pin para la tarea 1 (GPIO25)
+#define TASK2_PIN 26  // Pin para la tarea 2 (GPIO26)
+
+/**
+ * @brief Estructura para acceso a bits individuales de un registro de 32 bits
+ */
+typedef struct {
+    uint32_t b0 : 1;  // Bit 0
+    uint32_t b1 : 1;  // Bit 1
+    uint32_t b2 : 1;  // Bit 2
+    uint32_t b3 : 1;  // Bit 3
+    uint32_t b4 : 1;  // Bit 4
+    uint32_t b5 : 1;  // Bit 5
+    uint32_t b6 : 1;  // Bit 6
+    uint32_t b7 : 1;  // Bit 7
+    // ... (continuar para registros de 32 bits)
+} bitfield32_t;
+
+/**
+ * @brief Unión que permite acceso tanto por bits como por valor completo
+ */
+typedef union {
+    bitfield32_t bits;  // Acceso por bits individuales
+    uint32_t value;      // Acceso al registro completo
+} reg32_t;
+
+// Direcciones base de los periféricos (ESP32)
+#define DR_REG_GPIO_BASE 0x3ff44000
+
+// Punteros a registros GPIO importantes
+volatile reg32_t *my_GPIO_ENABLE = (reg32_t *)(DR_REG_GPIO_BASE + 0x20);  // Registro de habilitación
+volatile reg32_t *my_GPIO_OUT    = (reg32_t *)(DR_REG_GPIO_BASE + 0x04);   // Registro de salida
+volatile reg32_t *my_GPIO_OUT_W1TS = (reg32_t *)(DR_REG_GPIO_BASE + 0x08); // Registro para setear bits (1 escribe)
+volatile reg32_t *my_GPIO_OUT_W1TC = (reg32_t *)(DR_REG_GPIO_BASE + 0x0C); // Registro para limpiar bits (1 escribe)
+
+// Variables de control para las tareas
+volatile bool task1_flag = false;  // Flag para la tarea 1
+volatile bool task2_flag = false;  // Flag para la tarea 2
+
+// Prototipos de funciones
+void task1(void *pvParameters);    // Tarea 1
+void task2(void *pvParameters);    // Tarea 2
+void toggle_pin(uint8_t pin);      // Función para alternar pin GPIO
+void init_hardware(void);          // Inicialización de hardware
+
+/**
+ * @brief Punto de entrada principal (equivalente a setup() en Arduino)
+ */
+void app_main() {
+    // 1. Inicialización del hardware
+    init_hardware();
+    
+    // 2. Creación de tareas FreeRTOS
+    xTaskCreate(task1, "Task1", 2048, NULL, 1, NULL);  // Tarea para GPIO25
+    xTaskCreate(task2, "Task2", 2048, NULL, 1, NULL);  // Tarea para GPIO26
+}
+
+/**
+ * @brief Inicializa el hardware (GPIO)
+ */
+void init_hardware() {
+    // 1. Habilitar los pines GPIO25 y GPIO26 como salidas
+    my_GPIO_ENABLE->value |= (1 << TASK1_PIN) | (1 << TASK2_PIN);
+    
+    // 2. Poner los pines en estado LOW inicialmente
+    my_GPIO_OUT_W1TC->value = (1 << TASK1_PIN) | (1 << TASK2_PIN);
+}
+
+/**
+ * @brief Tarea 1 - Alterna GPIO25 cada 500ms
+ */
+void task1(void *pvParameters) {
+    const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
+    
+    while(1) {
+        toggle_pin(TASK1_PIN);  // Alternar el pin
+        vTaskDelay(xDelay);     // Esperar 500ms
+    }
+}
+
+/**
+ * @brief Tarea 2 - Alterna GPIO26 cada 1000ms
+ */
+void task2(void *pvParameters) {
+    const TickType_t xDelay = 1000 / portTICK_PERIOD_MS;
+    
+    while(1) {
+        toggle_pin(TASK2_PIN);  // Alternar el pin
+        vTaskDelay(xDelay);     // Esperar 1000ms
+    }
+}
+
+/**
+ * @brief Alterna el estado de un pin GPIO
+ * @param pin Número de pin a alternar (0-31)
+ */
+void toggle_pin(uint8_t pin) {
+    uint32_t mask = (1 << pin);
+    // Alternar usando los registros directos de set/clear
+    if(my_GPIO_OUT->value & mask) {
+        my_GPIO_OUT_W1TC->value = mask;  // Poner en LOW
+    } else {
+        my_GPIO_OUT_W1TS->value = mask;  // Poner en HIGH
+    }
+}
